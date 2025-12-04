@@ -22,7 +22,10 @@ def generate_synthetic_data(n_rows: int = 2000) -> pd.DataFrame:
     rng = np.random.default_rng(42)
 
     now = datetime.utcnow()
-    timestamps = [now - timedelta(minutes=int(m)) for m in rng.integers(0, 60 * 24 * 30, size=n_rows)]
+    timestamps = [
+        now - timedelta(minutes=int(m))
+        for m in rng.integers(0, 60 * 24 * 30, size=n_rows)
+    ]
 
     queries = [
         "running shoes",
@@ -90,12 +93,53 @@ def load_data() -> pd.DataFrame:
     return df
 
 
+# ------------- Helper: add price & revenue -------------
+def enrich_with_price_and_revenue(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ensure the dataframe has 'price' and 'revenue' columns.
+    Price is assigned per query, revenue = price * purchased.
+    """
+    df = df.copy()
+
+    # Base price per query (you can tune these)
+    base_prices = {
+        "running shoes": 90,
+        "wireless headphones": 120,
+        "laptop bag": 45,
+        "phone charger": 25,
+        "coffee mug": 15,
+        "office chair": 180,
+        "gaming keyboard": 85,
+        "baby stroller": 220,
+        "winter jacket": 160,
+        "smartwatch": 250,
+        "Smart phone": 750,
+    }
+
+    # If price not present, create it
+    if "price" not in df.columns:
+        df["price"] = df["query"].map(base_prices).fillna(50)
+
+        # add a bit of random noise around the base price
+        rng = np.random.default_rng(123)
+        df["price"] = df["price"] * rng.uniform(0.9, 1.1, size=len(df))
+        df["price"] = df["price"].round(2)
+
+    # If purchased exists but revenue not, compute it
+    if "purchased" in df.columns and "revenue" not in df.columns:
+        df["revenue"] = df["price"] * df["purchased"]
+    elif "revenue" not in df.columns:
+        df["revenue"] = 0.0
+
+    return df
+
+
 # ------------- Main app -------------
 st.title("🛒 Ecommerce Search Analytics Demo")
 
 st.caption(
     "Synthetic demo dashboard for analyzing on-site search behaviour: queries, clicks, "
-    "conversions and traffic patterns."
+    "conversions, sales, and revenue."
 )
 
 df = load_data()
@@ -103,6 +147,9 @@ df = load_data()
 if df.empty:
     st.error("Dataset is empty even after generation. Please check file permissions.")
     st.stop()
+
+# Ensure price & revenue exist
+df = enrich_with_price_and_revenue(df)
 
 # Sidebar filters
 st.sidebar.header("Filters")
@@ -157,14 +204,22 @@ if query_search.strip():
 
 df_filt = df[mask].copy()
 
+if df_filt.empty:
+    st.warning("No data for the selected filters. Try widening your date range or filters.")
+    st.stop()
+
+# ========== Summary metrics ==========
 st.subheader("Summary metrics")
 
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5, col6 = st.columns(6)
 
 total_searches = len(df_filt)
 click_through_rate = (df_filt["clicked"].mean() * 100) if total_searches else 0
 add_to_cart_rate = (df_filt["added_to_cart"].mean() * 100) if total_searches else 0
 purchase_rate = (df_filt["purchased"].mean() * 100) if total_searches else 0
+
+total_sales = int(df_filt["purchased"].sum())          # number of successful purchases
+total_revenue = float(df_filt["revenue"].sum())        # total revenue in monetary units
 
 with col1:
     st.metric("Total searches", f"{total_searches:,}")
@@ -174,10 +229,14 @@ with col3:
     st.metric("Add-to-cart rate", f"{add_to_cart_rate:.1f}%")
 with col4:
     st.metric("Purchase rate", f"{purchase_rate:.1f}%")
+with col5:
+    st.metric("Total sales (purchases)", f"{total_sales:,}")
+with col6:
+    st.metric("Total revenue", f"${total_revenue:,.2f}")
 
 st.markdown("---")
 
-# Top queries
+# ========== Top queries (now with revenue) ==========
 st.subheader("Top search queries")
 
 top_n = st.slider("Show top N queries", min_value=5, max_value=30, value=10, step=1)
@@ -188,6 +247,7 @@ top_queries = (
         searches=("query", "count"),
         ctr=("clicked", "mean"),
         purchases=("purchased", "sum"),
+        revenue=("revenue", "sum"),
     )
     .sort_values("searches", ascending=False)
     .head(top_n)
@@ -200,27 +260,45 @@ st.dataframe(
     use_container_width=True,
 )
 
-# Time series
-st.subheader("Searches over time")
+st.markdown("---")
+
+# ========== Performance indicator graph (searches, purchases, revenue) ==========
+st.subheader("Performance indicators over time")
 
 ts = (
     df_filt.set_index("timestamp")
     .resample("D")
     .agg(
         searches=("query", "count"),
-        ctr=("clicked", "mean"),
         purchases=("purchased", "sum"),
+        revenue=("revenue", "sum"),
     )
 )
 
 if not ts.empty:
-    st.line_chart(ts[["searches"]])
+    # Normalize slightly for better joint visualization if needed
+    st.line_chart(ts[["searches", "purchases", "revenue"]])
 else:
     st.info("No data available for the selected filters / date range.")
 
 st.markdown("---")
 
-st.subheader("Raw filtered data preview")
-st.dataframe(df_filt.head(200), use_container_width=True)
-
-
+# ========== Raw filtered data preview (with price & revenue) ==========
+st.subheader("Raw filtered data preview (including price & revenue)")
+cols_to_show = [
+    "timestamp",
+    "session_id",
+    "user_id",
+    "query",
+    "n_results",
+    "clicked",
+    "dwell_time_sec",
+    "added_to_cart",
+    "purchased",
+    "country",
+    "device",
+    "price",
+    "revenue",
+]
+existing_cols = [c for c in cols_to_show if c in df_filt.columns]
+st.dataframe(df_filt[existing_cols].head(200), use_container_width=True)
