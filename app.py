@@ -38,7 +38,7 @@ def generate_synthetic_data(n_rows: int = 2000) -> pd.DataFrame:
         "Smart phone",
     ]
     countries = ["Canada", "USA", "UK", "Germany", "India", "Brazil", "Kenya"]
-    devices = ["mobile", "desktop", "tablet", "gaming machine"]
+    devices = ["mobile", "desktop", "tablet", "cloth", "gaming machine"]
 
     data = {
         "timestamp": timestamps,
@@ -222,4 +222,5 @@ st.markdown("---")
 
 st.subheader("Raw filtered data preview")
 st.dataframe(df_filt.head(200), use_container_width=True)
+
 
