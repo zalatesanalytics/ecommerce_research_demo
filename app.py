@@ -35,9 +35,10 @@ def generate_synthetic_data(n_rows: int = 2000) -> pd.DataFrame:
         "baby stroller",
         "winter jacket",
         "smartwatch",
+        "Smart phone",
     ]
-    countries = ["Canada", "USA", "UK", "Germany", "India", "Brazil"]
-    devices = ["mobile", "desktop", "tablet"]
+    countries = ["Canada", "USA", "UK", "Germany", "India", "Brazil", "Kenya"]
+    devices = ["mobile", "desktop", "tablet", "gaming machine"]
 
     data = {
         "timestamp": timestamps,
@@ -64,7 +65,7 @@ def load_data() -> pd.DataFrame:
     if not CSV_PATH.exists() or CSV_PATH.stat().st_size == 0:
         st.warning(
             "No ecommerce_search_logs.csv data found or file is empty. "
-            "Generating synthetic dataset for the demo."
+            "Generating a synthetic dataset for the demo."
         )
         df_gen = generate_synthetic_data()
         df_gen.to_csv(CSV_PATH, index=False)
@@ -221,3 +222,4 @@ st.markdown("---")
 
 st.subheader("Raw filtered data preview")
 st.dataframe(df_filt.head(200), use_container_width=True)
+
